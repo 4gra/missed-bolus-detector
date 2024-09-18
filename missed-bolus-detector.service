@@ -1,0 +1,15 @@
+# install to /etc/systemd/system/missed-bolus-detector.service
+[Unit]
+Description=Nightscout Missed Bolus Service
+After=network.target nightscout.service
+Requires=nightscout.service
+
+[Service]
+User=apache
+ExecStart=/usr/bin/python3 /usr/local/bin/missed_bolus.py
+Restart=always
+Environment=PATH=/usr/bin:/usr/local/bin
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
