@@ -16,6 +16,7 @@ paste in
  - your nightscout API key
  - your pushover.net key & token
    (or comment out the call to `send_po_alert` if you really really don't want to use pushover)
+
 pip3 install requests (or get it some other way)
 
 run it! it will loop forever,
