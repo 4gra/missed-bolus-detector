@@ -18,7 +18,7 @@ conditions; view the included file LICENCE for details.
 Requires:
 The 'requests' module (what doesn't): python-requests.org
 Requires Nightscout to work at all: https://nightscout.github.io
-Requires a Pushover account for nice notifications (and, really, everyone should have one).
+Requires a Pushover account for nice notifications (really, everyone needs one): https://pushover.net
 """
 import requests
 import json
