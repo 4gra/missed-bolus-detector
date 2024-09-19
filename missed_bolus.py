@@ -170,8 +170,10 @@ def send_po_alert(carb_entry):
     """
     Function to send an alert via pushover
     """
+    carb_time = datetime.fromisoformat(carb_entry["timestamp"].replace('Z','+00:00'))
+    local_carb_time = carb_time.astimezone().strftime('(%Y-%m-%d) %H:%M')
     message = (
-        f"Missed bolus for {carb_entry['carbs']}g carbs at {carb_entry['timestamp']} (UTC)?"
+        f"Missed bolus for {carb_entry['carbs']}g carbs at {local_carb_time}?"
     )
     data = {
         "token": PUSHOVER_TOKEN,
