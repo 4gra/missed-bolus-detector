@@ -82,12 +82,12 @@ def check_missed_boluses(carb_data, insulin_func):
         print(f"Found carbs at {carb_entry['timestamp']}...")
 
         # This also covers future carbs; negatives are fine.
-        if (datetime.now() - carb_time).total_seconds() <= BOLUS_BEFORE:
+        if (datetime.utcnow() - carb_time).total_seconds() <= BOLUS_BEFORE:
             print(f"-- Too recent! Ignoring.")
             matched = True  # not used yet
             continue  # too recent! ignore.
         
-        if (datetime.now() - carb_time).total_seconds() > IGNORE_AFTER:
+        if (datetime.utcnow() - carb_time).total_seconds() > IGNORE_AFTER:
             print(f"-- Looked back far enough, quitting.")
             break  # too old: nothing left to find.
         
