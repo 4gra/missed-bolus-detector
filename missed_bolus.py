@@ -35,10 +35,11 @@ PUSHOVER_TOKEN = None
 PUSHOVER_KEY = None
 # Some preferences
 IGNORE_CARBS = 15  # ignore carb entries EQUAL TO OR LOWER than this
+IGNORE_AFTER = 1800  # ignore older than this (30 mins)
 HOSTNAME = socket.gethostname()
 APP_NAME = "missed-bolus-detector"
 BOLUS_BEFORE = 240  # bolus within 4 minutes of carbing! See also loop time.
-LOOP_TIME = 240 # loop time. max delay is therefore ~8mins.
+LOOP_TIME = 240  # loop time. max delay is therefore ~8mins.
 # Other parameters to tweak involve the number of carb and insulin entries to search.
 # These are set in main() - you could also search a time period instead of a count.
 
@@ -67,26 +68,42 @@ def fetch_data(filters, count=3):
         return []
 
 
-def check_missed_boluses(carb_data, insulin_data):
+def check_missed_boluses(carb_data, insulin_func):
     """
     Function to check for missed boluses
+    Carbs are assumed to be listed in reverse chronological order (this means
+    if you declare retrospective carbs, the detector might not work).
     """
+    insulin_data = None
+
     for carb_entry in carb_data:
         carb_time = datetime.fromisoformat(carb_entry["timestamp"][:-1])
         matched = False
         print(f"Found carbs at {carb_entry['timestamp']}...")
 
+        # This also covers future carbs; negatives are fine.
+        if (datetime.now() - carb_time).total_seconds() <= BOLUS_BEFORE:
+            print(f"-- Too recent! Ignoring.")
+            matched = True  # not used yet
+            continue  # too recent! ignore.
+        
+        if (datetime.now() - carb_time).total_seconds() > IGNORE_AFTER:
+            print(f"-- Looked back far enough, quitting.")
+            break  # too old: nothing left to find.
+        
+        # Don't do a second GET if we don't need to.
+        if insulin_data == None:
+            insulin_data = insulin_func()
+            if not insulin_data:
+                print("No data or error in fetching!")
+        
         # Check insulin entries for a corresponding bolus within NN minutes
         for insulin_entry in insulin_data:
             insulin_time = datetime.fromisoformat(insulin_entry["timestamp"][:-1])
             if 0 <= (insulin_time - carb_time).total_seconds() <= BOLUS_BEFORE:
                 print(f"-- Found matching insulin at {insulin_entry['timestamp']}.")
-                matched = True # useless but might use later.
+                matched = True
                 break
-
-        # No bolus yet; but check enough time has elapsed to worry
-        if 0 < ( datetime.now() - carb_time ).total_seconds() <= BOLUS_BEFORE:
-            break # too recent! just ignore.
 
         # Alert if no matching bolus found
         if not matched:
@@ -96,13 +113,13 @@ def check_missed_boluses(carb_data, insulin_data):
             break
 
 
-def already_alerted(carb_data):
+def already_alerted(carb_entry):
     """
     Checks to see if the alert has already been issued.
     """
     notes = fetch_data({"enteredBy": APP_NAME})
     for entry in notes:
-        if entry["timestamp"] == carb_data["timestamp"]:
+        if entry["timestamp"] == carb_entry["timestamp"]:
             print(f"-- Already alerted at {entry['timestamp']}...")
             return True
     return False
@@ -128,7 +145,7 @@ def send_ns_alert(carb_entry):
     You could change the careportal type to avoid double-notification.
     TODO: localise timezone, this will all by UTC...
     """
-    message = f"Missed bolus for {carb_entry['carbs']}g carbs at {carb_entry['timestamp']} UTC"
+    message = f"Missed bolus for {carb_entry['carbs']}g carbs at {carb_entry['timestamp']}"
     data = {
         "enteredBy": APP_NAME,  # Identifier for the alert source
         "eventType": "Question",  # Device status event
@@ -136,10 +153,10 @@ def send_ns_alert(carb_entry):
         "created_at": datetime.utcnow().isoformat() + "Z",  # current time
         "timestamp": carb_entry["timestamp"],  # Time of the carb entry
         "device": HOSTNAME,
-        "token": TOKEN,
+        "token": NS_TOKEN,
     }
 
-    url = f"{BASE_URL}/treatments?token={TOKEN}"
+    url = f"{BASE_URL}/treatments?token={NS_TOKEN}"
     # print(f">> {url} {data}")
     response = requests.post(url, data=data)
 
@@ -154,7 +171,7 @@ def send_po_alert(carb_entry):
     Function to send an alert via pushover
     """
     message = (
-        f"Missed bolus for {carb_entry['carbs']}g carbs at {carb_entry['timestamp']}?"
+        f"Missed bolus for {carb_entry['carbs']}g carbs at {carb_entry['timestamp']} (UTC)?"
     )
     data = {
         "token": PUSHOVER_TOKEN,
@@ -176,11 +193,13 @@ def main():
     Main loop, best approach for systemd.
     """
     while True:
-        carb_data = fetch_data({"eventType": "Carb Correction", "carbs][%24gt": IGNORE_CARBS}, 5)
-        insulin_data = fetch_data({"eventType": "Correction Bolus"}, 10)
+        carb_data = fetch_data(
+            {"eventType": "Carb Correction", "carbs][%24gt": IGNORE_CARBS}, 5
+        )
+        insulin_func = lambda: fetch_data({"eventType": "Correction Bolus"}, 10)
 
-        if carb_data and insulin_data:
-            check_missed_boluses(carb_data, insulin_data)
+        if carb_data and insulin_func:
+            check_missed_boluses(carb_data, insulin_func)
         else:
             print("No data or error in fetching")
 
